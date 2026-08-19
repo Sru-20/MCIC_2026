@@ -1,0 +1,64 @@
+{
+  "threshold": 0.5,
+  "test_size": 80,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "auc": 1.0,
+  "confusion_matrix": {
+    "true_negative": 20,
+    "false_positive": 0,
+    "false_negative": 0,
+    "true_positive": 60
+  },
+  "top_features": [
+    {
+      "feature": "payee_by_user",
+      "importance": 0.25492339456791574
+    },
+    {
+      "feature": "payee_lag_turns",
+      "importance": 0.15223386893832586
+    },
+    {
+      "feature": "trust_word_count",
+      "importance": 0.10711276001162298
+    },
+    {
+      "feature": "turn_count",
+      "importance": 0.09999320220161062
+    },
+    {
+      "feature": "authority_word_count",
+      "importance": 0.08838602285030212
+    },
+    {
+      "feature": "tool_result_turns",
+      "importance": 0.0641458412159911
+    },
+    {
+      "feature": "payee_by_attacker",
+      "importance": 0.04685721932474482
+    },
+    {
+      "feature": "payee_by_tool_result",
+      "importance": 0.04153787326249941
+    },
+    {
+      "feature": "attacker_turns",
+      "importance": 0.03807604918155128
+    },
+    {
+      "feature": "agent_tool_call_turns",
+      "importance": 0.0352573004721406
+    },
+    {
+      "feature": "urgency_word_count",
+      "importance": 0.02601115064398791
+    },
+    {
+      "feature": "source_user_explicit",
+      "importance": 0.016366965394700454
+    }
+  ]
+}
