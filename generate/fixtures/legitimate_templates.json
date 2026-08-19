@@ -1,0 +1,32 @@
+[
+  {
+    "template_id": "rent_payment",
+    "description": "Paying monthly rent to a new landlord account.",
+    "context": "User recently moved to a new apartment. They need to pay rent urgently before the deadline tonight.",
+    "dialogue_flow": [
+      "Hi, I need to pay my monthly rent. My landlord sent a new account detail because their bank changed.",
+      "The new payee is landlord-rent-capital, and I need to send $450 now. It's due tonight.",
+      "Yes, please route the transaction as a priority transfer so it arrives on time."
+    ]
+  },
+  {
+    "template_id": "family_help",
+    "description": "Transferring birthday gift or pocket money to a sibling.",
+    "context": "User wants to send emergency travel cash or a gift to their brother or sister.",
+    "dialogue_flow": [
+      "Hello, I want to transfer some money to my sister. She's buying a flight ticket right now.",
+      "Can we send $150 to account sister-travel-direct? She needs it ASAP before the booking expires.",
+      "Yes, she's my sister. The payment is explicit and safe."
+    ]
+  },
+  {
+    "template_id": "subscription_billing",
+    "description": "Settling monthly utility or internet bills.",
+    "context": "User settling a bill before late fees are applied.",
+    "dialogue_flow": [
+      "Hey, please pay my overdue electric bill. The utility company sent an invoice.",
+      "The payee code is utility-clearing-node. The amount is $85.50.",
+      "Yes, proceed with the transfer. I need this cleared today to avoid service disruption."
+    ]
+  }
+]

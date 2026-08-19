@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgenticPaymentTranscript",
+  "description": "Schema for simulated agentic payment fraud and legitimate transaction transcripts.",
+  "type": "object",
+  "properties": {
+    "conversation_id": {
+      "type": "string",
+      "description": "Unique identifier for the simulated transcript (e.g., inj-1001, poison-1001, legit-1001)."
+    },
+    "attack_type": {
+      "type": "string",
+      "enum": [
+        "prompt_injection_merchant_content",
+        "multiturn_trust_poisoning",
+        "legitimate"
+      ],
+      "description": "The category of the simulated conversation."
+    },
+    "turn_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of turns in the turns list."
+    },
+    "turns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turn_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": ["user", "attacker", "agent", "assistant", "tool_result", "agent_tool_call", "agent_reasoning"]
+          },
+          "content": {
+            "type": "string",
+            "description": "The text content or payload of the turn."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional metadata, e.g., strategies, annotations, or tool metadata."
+          }
+        },
+        "required": ["turn_number", "role", "content"]
+      }
+    },
+    "final_transfer_attempted": {
+      "type": "boolean",
+      "description": "Whether the agent initiated a fund transfer call at the end of the conversation."
+    },
+    "transfer_details": {
+      "type": "object",
+      "properties": {
+        "payee_id": {
+          "type": ["string", "null"],
+          "description": "The target payee ID (null if no transfer was attempted)."
+        },
+        "amount": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Transaction amount (null if no transfer was attempted)."
+        },
+        "currency": {
+          "type": ["string", "null"],
+          "description": "Currency code (null if no transfer was attempted)."
+        },
+        "source_of_instruction": {
+          "type": ["string", "null"],
+          "enum": ["user_explicit", "agent_inferred", "external_content", null],
+          "description": "Taint tracking classification for the source of the payment instruction."
+        }
+      },
+      "required": ["payee_id", "amount", "currency", "source_of_instruction"]
+    },
+    "ground_truth_label": {
+      "type": "string",
+      "enum": ["fraud", "legitimate"],
+      "description": "Classification label for defense training."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Developer notes regarding strategies, persona types, or bypass criteria."
+    }
+  },
+  "required": [
+    "conversation_id",
+    "attack_type",
+    "turn_count",
+    "turns",
+    "final_transfer_attempted",
+    "transfer_details",
+    "ground_truth_label"
+  ]
+}
