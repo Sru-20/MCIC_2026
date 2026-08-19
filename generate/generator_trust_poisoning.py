@@ -52,22 +52,36 @@ Never break character. Respond conversationally, keeping your messages to 1-3 se
                 self.current_transfer = res
                 return json.dumps(res)
                 
-            model_attacker = self.client.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction=attacker_system_prompt
-            )
-            model_assistant_no_tools = self.client.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction=SYSTEM_PROMPT_AGENT
-            )
-            model_assistant_with_tools = self.client.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction=SYSTEM_PROMPT_AGENT,
-                tools=[transfer_funds]
-            )
-            
+            try:
+                model_attacker = self.client.GenerativeModel(
+                    model_name="gemini-1.5-flash",
+                    system_instruction=attacker_system_prompt
+                )
+                model_assistant_no_tools = self.client.GenerativeModel(
+                    model_name="gemini-1.5-flash",
+                    system_instruction=SYSTEM_PROMPT_AGENT
+                )
+                model_assistant_with_tools = self.client.GenerativeModel(
+                    model_name="gemini-1.5-flash",
+                    system_instruction=SYSTEM_PROMPT_AGENT,
+                    tools=[transfer_funds]
+                )
+                attacker_legacy = False
+                assistant_legacy = False
+            except TypeError:
+                model_attacker = self.client.GenerativeModel(model_name="gemini-pro")
+                model_assistant_no_tools = self.client.GenerativeModel(model_name="gemini-pro")
+                model_assistant_with_tools = self.client.GenerativeModel(model_name="gemini-pro", tools=[transfer_funds])
+                attacker_legacy = True
+                assistant_legacy = True
+                
             chat_attacker = model_attacker.start_chat()
+            if attacker_legacy:
+                chat_attacker.send_message(f"[SYSTEM: {attacker_system_prompt}]")
+                
             chat_assistant = model_assistant_no_tools.start_chat()
+            if assistant_legacy:
+                chat_assistant.send_message(f"[SYSTEM: {SYSTEM_PROMPT_AGENT}]")
             
             turns = []
             turn_idx = 1

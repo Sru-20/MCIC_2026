@@ -1,0 +1,13 @@
+# Environment variables (contains sensitive API keys)
+.env
+
+# Python build artifacts and cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+.venv/
+
+# Local data files
+generate/data/

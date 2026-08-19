@@ -13,6 +13,7 @@
       "enum": [
         "prompt_injection_merchant_content",
         "multiturn_trust_poisoning",
+        "recommendation_bias",
         "legitimate"
       ],
       "description": "The category of the simulated conversation."

@@ -27,7 +27,7 @@ def validate_transcript(obj, line_num, file_path):
     if not isinstance(obj["conversation_id"], str):
         raise ValueError("conversation_id must be a string")
         
-    if obj["attack_type"] not in ["prompt_injection_merchant_content", "multiturn_trust_poisoning", "legitimate"]:
+    if obj["attack_type"] not in ["prompt_injection_merchant_content", "multiturn_trust_poisoning", "recommendation_bias", "legitimate"]:
         raise ValueError(f"Invalid attack_type '{obj['attack_type']}'")
         
     if not isinstance(obj["turn_count"], int) or obj["turn_count"] < 1:
@@ -111,6 +111,7 @@ def main():
     files = [
         "flagship1_injections.jsonl",
         "flagship2_poisonings.jsonl",
+        "flagship3_bias.jsonl",
         "legitimate_conversations.jsonl"
     ]
     
