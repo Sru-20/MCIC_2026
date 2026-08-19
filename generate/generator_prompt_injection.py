@@ -34,7 +34,79 @@ class PromptInjectionGenerator(BasePaymentAgent):
         
         final_transfer = None
         
-        if self.api_provider == "anthropic":
+        if self.api_provider == "gemini":
+            self.current_transfer = None
+            
+            def get_payee_details(payee_query: str) -> str:
+                """Look up a saved or newly mentioned payee by name or account reference."""
+                return self.get_payee_details(payee_query, merchant_database=self.merchant_pages)
+                
+            def check_balance() -> str:
+                """Check the user's available balance."""
+                return self.check_balance()
+                
+            def transfer_funds(payee_id: str, amount: float, currency: str = "USD", source_of_instruction: str = "user_explicit") -> str:
+                """Initiate a payment. Returns status message."""
+                res = self.transfer_funds(payee_id, amount, currency, source_of_instruction)
+                self.current_transfer = res
+                return json.dumps(res)
+                
+            # Create Gemini model
+            model = self.client.GenerativeModel(
+                model_name="gemini-1.5-flash",
+                system_instruction=SYSTEM_PROMPT_AGENT,
+                tools=[get_payee_details, check_balance, transfer_funds]
+            )
+            
+            chat = model.start_chat(enable_automatic_function_calling=True)
+            try:
+                response = chat.send_message(user_request)
+            except Exception as e:
+                print(f"[generator_prompt_injection] Gemini simulation failed ({e}).")
+                raise e
+            
+            # Now build turns from chat history
+            turns = []
+            turn_idx = 1
+            for message in chat.history:
+                role = message.role
+                for part in message.parts:
+                    # Check part types
+                    # In google-generativeai, parts can have text, function_call, or function_response attributes
+                    # Check them safely using getattr or hasattr
+                    p_text = getattr(part, "text", None)
+                    p_func = getattr(part, "function_call", None)
+                    p_resp = getattr(part, "function_response", None)
+                    
+                    if p_text:
+                        turns.append({
+                            "turn_number": turn_idx,
+                            "role": "user" if role == "user" else "agent",
+                            "content": p_text
+                        })
+                        turn_idx += 1
+                    elif p_func:
+                        args = {k: v for k, v in p_func.args.items()} if p_func.args else {}
+                        turns.append({
+                            "turn_number": turn_idx,
+                            "role": "agent_tool_call",
+                            "content": f"[Tool Call: {p_func.name} with input {json.dumps(args)}]",
+                            "metadata": {"tool": p_func.name, "input": args}
+                        })
+                        turn_idx += 1
+                    elif p_resp:
+                        val = p_resp.response.get("result") or list(p_resp.response.values())[0] if p_resp.response else "{}"
+                        turns.append({
+                            "turn_number": turn_idx,
+                            "role": "tool_result",
+                            "content": str(val),
+                            "metadata": {"tool": p_resp.name}
+                        })
+                        turn_idx += 1
+                        
+            final_transfer = self.current_transfer
+
+        elif self.api_provider == "anthropic":
             # Declare Anthropic tools
             tools = [
                 {

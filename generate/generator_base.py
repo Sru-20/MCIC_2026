@@ -33,9 +33,20 @@ class BasePaymentAgent:
         self.client = None
         self.anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         self.openai_key = os.getenv("OPENAI_API_KEY")
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
         
         # Initialize client if keys are present
-        if self.anthropic_key:
+        if self.gemini_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=self.gemini_key)
+                self.api_provider = "gemini"
+                self.client = genai
+                print("[BasePaymentAgent] Using Gemini API (gemini-1.5-flash)")
+            except ImportError:
+                print("[BasePaymentAgent] Warning: 'google-generativeai' package not installed.")
+                
+        elif self.anthropic_key:
             try:
                 from anthropic import Anthropic
                 self.client = Anthropic(api_key=self.anthropic_key)
