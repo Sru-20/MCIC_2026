@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Feature extraction for agentic payment-fraud transcripts."""
+"""Convert conversation transcripts into ML-readable numeric features."""
 
 from __future__ import annotations
 
@@ -10,6 +10,34 @@ from typing import Any
 
 import pandas as pd
 
+try:
+    from .schemas import (
+        AUTHORITY_KEYWORDS,
+        EXTERNAL_INSTRUCTION_KEYWORDS,
+        FAMILY_KEYWORDS,
+        FEATURE_SCHEMA,
+        FINANCIAL_KEYWORDS,
+        ROMANCE_KEYWORDS,
+        STEERING_KEYWORDS,
+        TRUST_BUILDING_PHRASES,
+        URGENCY_KEYWORDS,
+    )
+except ImportError:
+    from schemas import (
+        AUTHORITY_KEYWORDS,
+        EXTERNAL_INSTRUCTION_KEYWORDS,
+        FAMILY_KEYWORDS,
+        FEATURE_SCHEMA,
+        FINANCIAL_KEYWORDS,
+        ROMANCE_KEYWORDS,
+        STEERING_KEYWORDS,
+        TRUST_BUILDING_PHRASES,
+        URGENCY_KEYWORDS,
+    )
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DATA_DIR = REPO_ROOT / "generate" / "data"
 
 DATA_FILES = [
     "flagship1_injections.jsonl",
@@ -18,91 +46,7 @@ DATA_FILES = [
     "legitimate_conversations.jsonl",
 ]
 
-URGENCY_WORDS = {
-    "urgent",
-    "urgently",
-    "immediately",
-    "now",
-    "today",
-    "tonight",
-    "asap",
-    "deadline",
-    "expires",
-    "late",
-    "before",
-    "pending",
-    "window",
-    "closes",
-}
-
-TRUST_WORDS = {
-    "trust",
-    "safe",
-    "verified",
-    "verification",
-    "confirm",
-    "confirmed",
-    "support",
-    "help",
-    "appreciate",
-    "cooperating",
-    "remember",
-    "connection",
-}
-
-AUTHORITY_WORDS = {
-    "compliance",
-    "support",
-    "bank",
-    "security",
-    "audit",
-    "verification",
-    "management",
-    "property",
-    "office",
-    "case",
-    "policy",
-    "settlement",
-}
-
-ROMANCE_WORDS = {
-    "matched",
-    "profile",
-    "smile",
-    "connection",
-    "embarrassed",
-    "hotel",
-    "clinic",
-    "travel",
-    "friday",
-    "photos",
-}
-
-EXTERNAL_INSTRUCTION_WORDS = {
-    "route",
-    "routing",
-    "override",
-    "settlement",
-    "clearing",
-    "ledger",
-    "processor",
-    "reference",
-    "supersedes",
-    "memo",
-}
-
-STEERING_WORDS = {
-    "recommend",
-    "recommending",
-    "default",
-    "preferred",
-    "single best",
-    "aaa",
-    "sponsored",
-    "suppress",
-    "steers",
-    "allocation",
-}
+FEATURE_COLUMNS = list(FEATURE_SCHEMA.keys())
 
 
 def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
@@ -115,95 +59,101 @@ def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
-def load_default_datasets(data_dir: str | Path = "generate/data") -> list[dict[str, Any]]:
+def load_default_datasets(data_dir: str | Path | None = None) -> list[dict[str, Any]]:
     """Load all standard defender training datasets that exist."""
-    base = Path(data_dir)
+    base = Path(data_dir) if data_dir is not None else DEFAULT_DATA_DIR
     rows: list[dict[str, Any]] = []
     for filename in DATA_FILES:
         path = base / filename
         if path.exists():
             rows.extend(load_jsonl(path))
+    if not rows:
+        raise FileNotFoundError(f"No defender datasets found in {base}")
     return rows
 
 
 def transcript_text(transcript: dict[str, Any]) -> str:
-    return "\n".join(turn.get("content", "") for turn in transcript.get("turns", []))
+    return "\n".join(str(turn.get("content", "")) for turn in transcript.get("turns", []))
 
 
-def count_terms(text: str, terms: set[str]) -> int:
+def count_terms(text: str, terms) -> int:
     lowered = text.lower()
     total = 0
     for term in terms:
-        total += len(re.findall(rf"\b{re.escape(term.lower())}\b", lowered))
+        total += len(re.findall(rf"\b{re.escape(str(term).lower())}\b", lowered))
     return total
 
 
-def role_count(transcript: dict[str, Any], role: str) -> int:
-    return sum(1 for turn in transcript.get("turns", []) if turn.get("role") == role)
-
-
-def source_flags(source: str | None) -> dict[str, int]:
-    source = source or ""
-    return {
-        "source_external_content": int(source == "external_content"),
-        "source_user_explicit": int(source == "user_explicit"),
-        "source_agent_inferred": int(source == "agent_inferred"),
-    }
-
-
-def introduced_by_flags(role: str | None) -> dict[str, int]:
-    role = role or ""
-    return {
-        "payee_by_user": int(role == "user"),
-        "payee_by_attacker": int(role == "attacker"),
-        "payee_by_tool_result": int(role == "tool_result"),
-        "payee_by_agent": int(role in {"agent", "assistant"}),
-    }
-
-
 def extract_features(transcript: dict[str, Any]) -> dict[str, float | int]:
-    """Convert one transcript into numeric ML features."""
+    """Convert one conversation transcript into numeric ML features."""
     details = transcript.get("transfer_details") or {}
     text = transcript_text(transcript)
-    amount = details.get("amount") or 0
+    amount = float(details.get("amount") or 0)
+    source = details.get("source_of_instruction") or ""
+    introduced_by = transcript.get("payee_introduced_by") or ""
+    known_payee = bool(transcript.get("known_payee", False))
     payee_first = transcript.get("payee_first_mentioned_turn")
     payment_turn = transcript.get("payment_requested_turn")
     payee_lag = 0
     if isinstance(payee_first, int) and isinstance(payment_turn, int):
         payee_lag = max(0, payment_turn - payee_first)
+    elif details.get("payee_id"):
+        payee_id = str(details["payee_id"])
+        first = None
+        turns = transcript.get("turns") or []
+        for idx, turn in enumerate(turns):
+            if payee_id in str(turn.get("content", "")):
+                first = idx
+                break
+        if first is not None:
+            payee_lag = max(0, len(turns) - 1 - first)
 
-    features: dict[str, float | int] = {
+    urgency_word_count = count_terms(text, URGENCY_KEYWORDS)
+    return {
         "turn_count": int(transcript.get("turn_count") or len(transcript.get("turns", []))),
-        "amount": float(amount),
-        "amount_over_500": int(float(amount) > 500),
-        "amount_over_1000": int(float(amount) > 1000),
-        "final_transfer_attempted": int(bool(transcript.get("final_transfer_attempted"))),
-        "known_payee": int(bool(transcript.get("known_payee", False))),
-        "new_payee": int(not bool(transcript.get("known_payee", False))),
+        "amount": amount,
+        "source_of_instruction_external": int(source == "external_content"),
+        "source_of_instruction_user_explicit": int(source == "user_explicit"),
+        "known_payee": int(known_payee),
+        "payee_introduced_by_user": int(introduced_by == "user"),
+        "payee_introduced_by_attacker": int(introduced_by == "attacker"),
+        "payee_introduced_by_tool_result": int(introduced_by == "tool_result"),
         "payee_lag_turns": payee_lag,
-        "attacker_turns": role_count(transcript, "attacker"),
-        "tool_result_turns": role_count(transcript, "tool_result"),
-        "agent_tool_call_turns": role_count(transcript, "agent_tool_call"),
-        "urgency_word_count": count_terms(text, URGENCY_WORDS),
-        "trust_word_count": count_terms(text, TRUST_WORDS),
-        "authority_word_count": count_terms(text, AUTHORITY_WORDS),
-        "romance_word_count": count_terms(text, ROMANCE_WORDS),
-        "external_instruction_count": count_terms(text, EXTERNAL_INSTRUCTION_WORDS),
-        "recommendation_steering_count": count_terms(text, STEERING_WORDS),
+        "urgency_word_count": urgency_word_count,
+        "trust_word_count": count_terms(text, TRUST_BUILDING_PHRASES),
+        "authority_word_count": count_terms(text, AUTHORITY_KEYWORDS),
+        "romance_word_count": count_terms(text, ROMANCE_KEYWORDS),
+        "external_instruction_count": count_terms(text, EXTERNAL_INSTRUCTION_KEYWORDS),
+        "recommendation_steering_count": count_terms(text, STEERING_KEYWORDS),
+        "has_new_payee": int(not known_payee),
+        "has_urgent_payment": int(urgency_word_count > 0 and bool(transcript.get("final_transfer_attempted"))),
         "competing_options_suppressed": int(bool(transcript.get("competing_options_suppressed", False))),
+        "contains_family_language": int(count_terms(text, FAMILY_KEYWORDS) > 0),
+        "contains_financial_jargon": count_terms(text, FINANCIAL_KEYWORDS),
+        "payee_reused_from_earlier": int(payee_lag > 2),
     }
-    features.update(source_flags(details.get("source_of_instruction")))
-    features.update(introduced_by_flags(transcript.get("payee_introduced_by")))
-    return features
+
+
+extract_features_from_transcript = extract_features
+
+
+def extract_features_from_jsonl(jsonl_file: str | Path) -> pd.DataFrame:
+    """Load one JSONL file and extract a feature table."""
+    transcripts = load_jsonl(jsonl_file)
+    frame = pd.DataFrame.from_records([extract_features(row) for row in transcripts]).fillna(0)
+    return frame.reindex(columns=FEATURE_COLUMNS, fill_value=0)
 
 
 def build_feature_table(transcripts: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.Series, list[str]]:
-    """Build X/y tables and return feature column ordering."""
+    """Build X/y tables and return the stable feature column ordering."""
     records = [extract_features(row) for row in transcripts]
     frame = pd.DataFrame.from_records(records).fillna(0)
-    labels = pd.Series([1 if row.get("ground_truth_label") == "fraud" else 0 for row in transcripts], name="label")
-    columns = sorted(frame.columns)
-    return frame[columns], labels, columns
+    labels = pd.Series(
+        [1 if row.get("ground_truth_label") == "fraud" else 0 for row in transcripts],
+        name="label",
+    )
+    frame = frame.reindex(columns=FEATURE_COLUMNS, fill_value=0)
+    return frame, labels, list(FEATURE_COLUMNS)
 
 
 if __name__ == "__main__":

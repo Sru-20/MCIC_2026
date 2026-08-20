@@ -24,6 +24,8 @@ Each JSONL file contains one conversation transcript per line.
 
 ```bash
 python generate/harden_datasets.py
+python generate/verify_fidelity.py
+python defend/run_all.py
 ```
 
 The hardening script creates deterministic, schema-compatible data with realistic payee IDs,

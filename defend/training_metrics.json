@@ -1,5 +1,5 @@
 {
-  "model": "RandomForestClassifier",
+  "model": "XGBClassifier",
   "total_transcripts": 400,
   "train_size": 320,
   "test_size": 80,

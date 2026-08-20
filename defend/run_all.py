@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run the full Person B defender pipeline."""
 
-from train import train_model
-from evaluate import evaluate_model
 from breakdown import analyze
+from evaluate import evaluate_model, write_evaluation_report
+from train import train_model
 
 
 def main() -> None:
@@ -18,6 +18,7 @@ def main() -> None:
     print("Generating gate-vs-detector breakdown...")
     breakdown = analyze()
     summary = breakdown["summary"]
+    write_evaluation_report(eval_metrics, summary)
     print(
         "Combined defense complete: "
         f"gate={summary['gate_caught_rate']:.1%}, "

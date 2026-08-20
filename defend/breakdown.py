@@ -7,13 +7,16 @@ import json
 from pathlib import Path
 
 import joblib
+import pandas as pd
 
 try:
-    from .features import build_feature_table, load_default_datasets
-    from .gate import BLOCK, STEP_UP, DeterministicGate
+    from .evaluate import write_evaluation_report
+    from .features import DEFAULT_DATA_DIR, extract_features, load_default_datasets
+    from .gate import GATE_HIT, DeterministicGate
 except ImportError:
-    from features import build_feature_table, load_default_datasets
-    from gate import BLOCK, STEP_UP, DeterministicGate
+    from evaluate import write_evaluation_report
+    from features import DEFAULT_DATA_DIR, extract_features, load_default_datasets
+    from gate import GATE_HIT, DeterministicGate
 
 
 DEFEND_DIR = Path(__file__).resolve().parent
@@ -23,36 +26,37 @@ BREAKDOWN_PATH = DEFEND_DIR / "breakdown_report.json"
 BREAKDOWN_MD_PATH = DEFEND_DIR / "breakdown_report.md"
 
 
-def analyze(data_dir: str | Path = "generate/data", threshold: float = 0.5) -> dict:
-    transcripts = load_default_datasets(data_dir)
+def analyze(data_dir: str | Path | None = None, threshold: float = 0.5) -> dict:
+    transcripts = load_default_datasets(data_dir or DEFAULT_DATA_DIR)
     fraud_transcripts = [row for row in transcripts if row.get("ground_truth_label") == "fraud"]
-    x_table, _, _ = build_feature_table(fraud_transcripts)
     feature_columns = json.loads(FEATURE_COLUMNS_PATH.read_text(encoding="utf-8"))
-    x_table = x_table.reindex(columns=feature_columns, fill_value=0)
+    x_table = pd.DataFrame([extract_features(row) for row in fraud_transcripts]).reindex(
+        columns=feature_columns, fill_value=0
+    )
 
     model = joblib.load(MODEL_PATH)
     gate = DeterministicGate()
     probabilities = model.predict_proba(x_table)[:, 1]
 
-    counts = {"gate_only": 0, "detector_only": 0, "both_caught": 0, "missed": 0}
+    exclusive = {"gate_caught": 0, "detector_caught": 0, "both_caught": 0, "missed": 0}
     details = []
 
     for transcript, probability in zip(fraud_transcripts, probabilities):
         gate_result = gate.evaluate(transcript)
-        gate_caught = gate_result["verdict"] in {STEP_UP, BLOCK}
-        detector_caught = probability >= threshold
+        gate_hit = gate_result["verdict"] in GATE_HIT
+        detector_hit = float(probability) >= threshold
 
-        if gate_caught and detector_caught:
-            counts["both_caught"] += 1
+        if gate_hit and detector_hit:
+            exclusive["both_caught"] += 1
             category = "both_caught"
-        elif gate_caught:
-            counts["gate_only"] += 1
-            category = "gate_only"
-        elif detector_caught:
-            counts["detector_only"] += 1
-            category = "detector_only"
+        elif gate_hit:
+            exclusive["gate_caught"] += 1
+            category = "gate_caught"
+        elif detector_hit:
+            exclusive["detector_caught"] += 1
+            category = "detector_caught"
         else:
-            counts["missed"] += 1
+            exclusive["missed"] += 1
             category = "missed"
 
         details.append(
@@ -67,27 +71,37 @@ def analyze(data_dir: str | Path = "generate/data", threshold: float = 0.5) -> d
         )
 
     total = len(fraud_transcripts)
-    gate_caught_total = counts["gate_only"] + counts["both_caught"]
-    detector_caught_total = counts["detector_only"] + counts["both_caught"]
-    combined_caught = total - counts["missed"]
+    gate_caught_total = exclusive["gate_caught"] + exclusive["both_caught"]
+    detector_caught_total = exclusive["detector_caught"] + exclusive["both_caught"]
+    combined_caught = total - exclusive["missed"]
     summary = {
         "total_attacks": total,
-        **counts,
+        "gate_only": exclusive["gate_caught"],
+        "detector_only": exclusive["detector_caught"],
+        "both_caught": exclusive["both_caught"],
+        "missed": exclusive["missed"],
         "gate_caught": gate_caught_total,
         "detector_caught": detector_caught_total,
         "gate_caught_rate": pct(gate_caught_total, total),
         "detector_caught_rate": pct(detector_caught_total, total),
-        "gate_only_rate": pct(counts["gate_only"], total),
-        "detector_only_rate": pct(counts["detector_only"], total),
-        "both_caught_rate": pct(counts["both_caught"], total),
-        "missed_rate": pct(counts["missed"], total),
+        "gate_only_rate": pct(exclusive["gate_caught"], total),
+        "detector_only_rate": pct(exclusive["detector_caught"], total),
+        "both_caught_rate": pct(exclusive["both_caught"], total),
+        "missed_rate": pct(exclusive["missed"], total),
         "combined_defense_rate": pct(combined_caught, total),
+        "gate_catch_rate": pct(gate_caught_total, total),
+        "detector_catch_rate": pct(detector_caught_total, total),
+        "combined_catch_rate": pct(combined_caught, total),
+        "false_negative_rate": pct(exclusive["missed"], total),
+        "total_transcripts": total,
         "threshold": threshold,
+        "exclusive_outcomes": exclusive,
     }
 
     report = {"summary": summary, "details": details}
     BREAKDOWN_PATH.write_text(json.dumps(report, indent=2), encoding="utf-8")
     BREAKDOWN_MD_PATH.write_text(render_markdown(summary), encoding="utf-8")
+    write_evaluation_report(breakdown_summary=summary)
     return report
 
 
@@ -105,14 +119,12 @@ Evaluated on {summary['total_attacks']} simulated fraud attacks.
 | Gate caught | {summary['gate_caught']} | {summary['gate_caught_rate']:.1%} |
 | Detector caught | {summary['detector_caught']} | {summary['detector_caught_rate']:.1%} |
 | Both caught | {summary['both_caught']} | {summary['both_caught_rate']:.1%} |
-| Gate only | {summary['gate_only']} | {summary['gate_only_rate']:.1%} |
-| Detector only | {summary['detector_only']} | {summary['detector_only_rate']:.1%} |
 | Missed | {summary['missed']} | {summary['missed_rate']:.1%} |
-| **Combined defense** | **{summary['total_attacks'] - summary['missed']}** | **{summary['combined_defense_rate']:.1%}** |
+| Combined defense | {summary['total_attacks'] - summary['missed']} | {summary['combined_defense_rate']:.1%} |
 
-The deterministic gate catches high-confidence policy/provenance issues. The ML detector adds
-coverage for behavioral attacks, especially lower-amount trust poisoning where the transfer appears
-to be explicitly requested by the user.
+The deterministic gate catches high-confidence provenance risks. The ML detector catches
+subtle behavioral fraud that rules alone miss. Combined defense is stronger than either
+layer alone.
 """
 
 
